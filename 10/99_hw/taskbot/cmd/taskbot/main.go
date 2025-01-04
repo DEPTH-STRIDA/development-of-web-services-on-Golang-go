@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	WebhookURL = "https://3a32-195-133-26-121.ngrok-free.app"
+	WebhookURL = "https://8bc7-195-133-26-121.ngrok-free.app"
 	BotToken   = "6710814964:AAHoa076nJmN8ScXt2Kv9iCuihUDiZnunw0"
 )
 

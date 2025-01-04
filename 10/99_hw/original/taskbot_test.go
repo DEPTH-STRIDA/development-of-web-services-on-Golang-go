@@ -4,20 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strconv"
 	"sync/atomic"
 
+	// "encoding/json"
+	"fmt"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+
+	// "io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
-
-	// импорт с переименованием.
-	// tgbotapi используется в примерах из документации.
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
 func init() {
@@ -27,20 +28,16 @@ func init() {
 	BotToken = "_golangcourse_test"
 }
 
-// HTTP клиент с таймаутом в 1 секунду
-// Используется для отправки запросов к тестовому серверу
-// Timeout определяет максимальное время ожидания для всего HTTP запроса (включая чтение ответа)
-var client = &http.Client{Timeout: time.Second}
+var (
+	client = &http.Client{Timeout: time.Second}
+)
 
-// TDS (Telegram Dummy Server) - мок-сервер, имитирующий Telegram Bot API
-// Mutex используется для безопасного доступа к map из разных горутин
-// Answers хранит ответы бота для разных пользователей (ключ - ID пользователя)
+// TDS is Telegram Dummy Server
 type TDS struct {
 	*sync.Mutex
 	Answers map[int]string
 }
 
-// NewTDS создает новый экземпляр мок-сервера
 func NewTDS() *TDS {
 	return &TDS{
 		Mutex:   &sync.Mutex{},
@@ -48,30 +45,16 @@ func NewTDS() *TDS {
 	}
 }
 
-// ServeHTTP обрабатывает HTTP запросы к мок-серверу
-// Реализует основные методы Telegram Bot API:
-// - /getMe - информация о боте
-// - /setWebhook - установка вебхука
-// - /sendMessage - отправка сообщения
 func (srv *TDS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// mux - это маршрутизатор, который используется для обработки HTTP запросов.
-	// Он создается с помощью http.NewServeMux() и используется для маршрутизации запросов к различным обработчикам.
 	mux := http.NewServeMux()
-
-	// Обработчик для метода /getMe
-	// Возвращает информацию о боте в формате JSON
 	mux.HandleFunc("/getMe", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"ok":true,"result":{"id":` +
 			strconv.Itoa(BotChatID) +
 			`,"is_bot":true,"first_name":"game_test_bot","username":"game_test_bot"}}`))
 	})
-
-	// Обработчик для метода /setWebhook
-	// Возвращает true, если вебхук был успешно установлен
 	mux.HandleFunc("/setWebhook", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"ok":true,"result":true,"description":"Webhook was set"}`))
 	})
-
 	mux.HandleFunc("/sendMessage", func(w http.ResponseWriter, r *http.Request) {
 		chatID, _ := strconv.Atoi(r.FormValue("chat_id"))
 		text := r.FormValue("text")
@@ -90,20 +73,16 @@ func (srv *TDS) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
-// Константы для тестовых пользователей
 const (
-	// ID пользователей
 	Ivanov     int = 256
 	Petrov     int = 512
 	Alexandrov int = 1024
-	// ID бота
-	BotChatID = 100500
+	BotChatID      = 100500
 )
 
 var (
-	// Пользователи
 	users = map[int]*tgbotapi.User{
-		Ivanov: {
+		Ivanov: &tgbotapi.User{
 			ID:           Ivanov,
 			FirstName:    "Ivan",
 			LastName:     "Ivanov",
@@ -111,7 +90,7 @@ var (
 			LanguageCode: "ru",
 			IsBot:        false,
 		},
-		Petrov: {
+		Petrov: &tgbotapi.User{
 			ID:           Petrov,
 			FirstName:    "Petr",
 			LastName:     "Pertov",
@@ -119,7 +98,7 @@ var (
 			LanguageCode: "ru",
 			IsBot:        false,
 		},
-		Alexandrov: {
+		Alexandrov: &tgbotapi.User{
 			ID:           Alexandrov,
 			FirstName:    "Alex",
 			LastName:     "Alexandrov",
@@ -129,31 +108,34 @@ var (
 		},
 	}
 
-	// ID обновления и сообщения
 	updID uint64
 	msgID uint64
 )
 
-// SendMsgToBot эмулирует отправку сообщения боту от пользователя
-// userID - ID отправителя
-// text - текст сообщения
-// Создает объект Update, как это делает настоящий Telegram, и отправляет его боту
 func SendMsgToBot(userID int, text string) error {
-	// Увеличиваем ID обновления и сообщения
+	// reqText := `{
+	// 	"update_id":175894614,
+	// 	"message":{
+	// 		"message_id":29,
+	// 		"from":{"id":133250764,"is_bot":false,"first_name":"Vasily Romanov","username":"rvasily","language_code":"ru"},
+	// 		"chat":{"id":133250764,"first_name":"Vasily Romanov","username":"rvasily","type":"private"},
+	// 		"date":1512168732,
+	// 		"text":"THIS SEND FROM USER"
+	// 	}
+	// }`
+
 	atomic.AddUint64(&updID, 1)
 	myUpdID := atomic.LoadUint64(&updID)
 
-	// Увеличиваем ID сообщения
+	// better have it per user, but lazy now
 	atomic.AddUint64(&msgID, 1)
 	myMsgID := atomic.LoadUint64(&msgID)
 
-	// Получаем пользователя из карты
 	user, ok := users[userID]
 	if !ok {
 		return fmt.Errorf("no user %v", userID)
 	}
 
-	// Создаем объект обновления
 	upd := &tgbotapi.Update{
 		UpdateID: int(myUpdID),
 		Message: &tgbotapi.Message{
@@ -171,14 +153,12 @@ func SendMsgToBot(userID int, text string) error {
 	}
 	reqData, _ := json.Marshal(upd)
 
-	// Отправляем запрос на вебхук
 	reqBody := bytes.NewBuffer(reqData)
 	req, _ := http.NewRequest(http.MethodPost, WebhookURL, reqBody)
 	_, err := client.Do(req)
 	return err
 }
 
-// Структура для хранения тестовых случаев
 type testCase struct {
 	user    int
 	command string
@@ -186,39 +166,26 @@ type testCase struct {
 }
 
 func TestTasks(t *testing.T) {
-	// Создаем мок-сервер
-	tds := NewTDS()
+
+	tds := NewTDS() // это мой эмулятор телеграм сервера
 	ts := httptest.NewServer(tds)
 	tgbotapi.APIEndpoint = ts.URL + "/bot%s/%s"
 
-	// Создаем контекст с таймаутом
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	// Канал для передачи ошибок
-	errCh := make(chan error, 1)
-
-	// Запускаем бота в отдельной горутине
 	go func() {
-		if err := startTaskBot(ctx, ":8081"); err != nil && err != context.Canceled {
-			errCh <- err
+		err := startTaskBot(ctx, ":8081")
+		if err != nil {
+			t.Fatalf("startTaskBot error: %s", err)
 		}
 	}()
 
-	// Ждем запуск бота
-	time.Sleep(500 * time.Millisecond)
+	// give server time to start
+	time.Sleep(10 * time.Millisecond)
 
-	// Проверяем, что бот запустился без ошибок
-	select {
-	case err := <-errCh:
-		t.Fatalf("startTaskBot error: %s", err)
-	default:
-	}
-
-	// Тестовые случаи
 	cases := []testCase{
-		// Иванов смотрим задачи, создает задачу, смотрит задачи
 		{
+			// команда /tasks - выводит список всех активных задач
 			Ivanov,
 			"/tasks",
 			map[int]string{
@@ -226,6 +193,7 @@ func TestTasks(t *testing.T) {
 			},
 		},
 		{
+			// команда /new - создаёт новую задачу, всё что после /new - идёт в название задачи
 			Ivanov,
 			"/new написать бота",
 			map[int]string{
@@ -240,9 +208,8 @@ func TestTasks(t *testing.T) {
 /assign_1`,
 			},
 		},
-		// Александров назначает себя на задачу. В ответ получает сообщение о назначении
-		// + сообщение Иванову о назначении (владельцу, если не было исполнителя)
 		{
+			// /assign_* - назначает задачу на себя
 			Alexandrov,
 			"/assign_1",
 			map[int]string{
@@ -250,9 +217,9 @@ func TestTasks(t *testing.T) {
 				Ivanov:     `Задача "написать бота" назначена на @aalexandrov`,
 			},
 		},
-		// Петров назначает себя на задачу. В ответ получает сообщение о назначении
-		// + сообщение Александрову о назначении (предыдущему исполнителю)
 		{
+			// в случае если задача была назначена на кого-то - он получает уведомление об этом
+			// в данном случае она была назначена на Alexandrov, поэтому ему отправляется уведомление
 			Petrov,
 			"/assign_1",
 			map[int]string{
@@ -260,9 +227,9 @@ func TestTasks(t *testing.T) {
 				Alexandrov: `Задача "написать бота" назначена на @ppetrov`,
 			},
 		},
-
 		{
-			Alexandrov,
+			// если задача назначена и на мне - показывается "на меня"
+			Petrov,
 			"/tasks",
 			map[int]string{
 				Petrov: `1. написать бота by @ivanov
@@ -271,6 +238,8 @@ assignee: я
 			},
 		},
 		{
+			// если задача назначена и не на мне - показывается логин исполнителя
+			// при
 			Ivanov,
 			"/tasks",
 			map[int]string{
@@ -278,16 +247,20 @@ assignee: я
 assignee: @ppetrov`,
 			},
 		},
-		// Александров снимает задачу с себя, но не может потому что она не на нём
+
 		{
+			// /unassign_ - снимает задачу с себя
+			// нельзя снять задачу которая не на вас
 			Alexandrov,
 			"/unassign_1",
 			map[int]string{
 				Alexandrov: `Задача не на вас`,
 			},
 		},
-		// Петров снимает задачу с себя, она остаётся без исполнителя
+
 		{
+			// /unassign_ - снимает задачу с себя
+			// автору отправляется уведомление что задача осталась без исполнителя
 			Petrov,
 			"/unassign_1",
 			map[int]string{
@@ -295,8 +268,10 @@ assignee: @ppetrov`,
 				Ivanov: `Задача "написать бота" осталась без исполнителя`,
 			},
 		},
+
 		{
-			// Как и в предыдущем случае, Петров назначает задачу на себя И ЕСЛИ НЕТ ИСПОЛНИТЕЛЯ, то уведомление владельцу
+			// повтор
+			// в случае если задача была назначена на кого-то - автор получает уведомление об этом
 			Petrov,
 			"/assign_1",
 			map[int]string{
@@ -305,6 +280,8 @@ assignee: @ppetrov`,
 			},
 		},
 		{
+			// /resolve_* завершает задачу, удаляет её из хранилища
+			// автору отправляется уведомление об этом
 			Petrov,
 			"/resolve_1",
 			map[int]string{
@@ -312,6 +289,7 @@ assignee: @ppetrov`,
 				Ivanov: `Задача "написать бота" выполнена @ppetrov`,
 			},
 		},
+
 		{
 			Petrov,
 			"/tasks",
@@ -319,7 +297,9 @@ assignee: @ppetrov`,
 				Petrov: `Нет задач`,
 			},
 		},
+
 		{
+			// обратите внимание, id=2 - автоинкремент
 			Petrov,
 			"/new сделать ДЗ по курсу",
 			map[int]string{
@@ -327,6 +307,7 @@ assignee: @ppetrov`,
 			},
 		},
 		{
+			// обратите внимание, id=3 - автоинкремент
 			Ivanov,
 			"/new прийти на хакатон",
 			map[int]string{
@@ -345,6 +326,9 @@ assignee: @ppetrov`,
 			},
 		},
 		{
+			// повтор
+			// в случае если задача была назначена на кого-то - автор получает уведомление об этом
+			// если он автор задачи - ему не приходит дополнительного уведомления о том что она назначена на кого-то
 			Petrov,
 			"/assign_2",
 			map[int]string{
@@ -364,6 +348,8 @@ assignee: я
 			},
 		},
 		{
+			// /my показывает задачи которые назначены на меня
+			// при этому тут нет метки assegnee
 			Petrov,
 			"/my",
 			map[int]string{
@@ -372,6 +358,8 @@ assignee: я
 			},
 		},
 		{
+			// /owner - показывает задачи, которы я создал
+			// при этому тут нет метки assegnee
 			Ivanov,
 			"/owner",
 			map[int]string{
@@ -381,31 +369,27 @@ assignee: я
 		},
 	}
 
-	// Выполняем тесты
 	for idx, item := range cases {
-		// Очищаем ответы перед каждым тестом
+
 		tds.Lock()
 		tds.Answers = make(map[int]string)
 		tds.Unlock()
 
-		// Формируем имя теста
 		caseName := fmt.Sprintf("[case%d, %d: %s]", idx, item.user, item.command)
-
-		// Отправляем сообщение боту
 		err := SendMsgToBot(item.user, item.command)
 		if err != nil {
 			t.Fatalf("%s SendMsgToBot error: %s", caseName, err)
 		}
-
-		// Даем время на обработку запроса
+		// give TDS time to process request
 		time.Sleep(10 * time.Millisecond)
 
-		// Проверяем ответы
 		tds.Lock()
 		result := reflect.DeepEqual(tds.Answers, item.answers)
 		if !result {
 			t.Fatalf("%s bad results:\n\tWant: %v\n\tHave: %v", caseName, item.answers, tds.Answers)
 		}
 		tds.Unlock()
+
 	}
+
 }

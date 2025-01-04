@@ -2,9 +2,14 @@ package repository
 
 import (
 	"sync"
+	"sync/atomic"
 	"taskbot/internal/models"
 )
 
+// см. exmaple/package.go
+// В данном пакете используется смешенный паттерн Singleton
+
+// Экземпляр структуры для взаимодействия с памятью
 var (
 	GlobalMemory *Memory
 )
@@ -14,17 +19,29 @@ func init() {
 }
 
 type Memory struct {
+	// Примитив синхронизации для работы с памятью
+	// Стоит отметить, что существует много других примитивов синхронизации, а также библиотек для работы с
+	// потокобезопасным кешем.
+	// Есть встроенная библиотека sync.Map, которая является потокобезопасным кешем.
+	// Тут нужно досканально изучать варианты и потребности проекта.
+
+	// Мютекс следует размещать над полями, который он защищает.
 	sync.RWMutex
-	tasks  []models.Task
-	users  map[int64]*models.User
+	// Последний ID задачи
 	lastID int64
+	// Хранилище задач
+	tasks []models.Task
+	// Хранилище пользователей
+	users map[int64]*models.User
 }
 
+// NewMemory создает новый экземпляр структуры Memory
 func NewMemory() *Memory {
 	return &Memory{
-		tasks:  make([]models.Task, 0),
-		users:  make(map[int64]*models.User),
-		lastID: 0,
+		RWMutex: sync.RWMutex{},
+		tasks:   make([]models.Task, 0),
+		users:   make(map[int64]*models.User),
+		lastID:  0,
 	}
 }
 
@@ -40,6 +57,8 @@ func (m *Memory) GetUser(id int64) (*models.User, bool) {
 	m.RLock()
 	defer m.RUnlock()
 	user, exists := m.users[id]
+
+	// Возвращается ссылка на пользователя, стоит помнить, что пользователь не удаляется и можно вернуть ссылку, а не копию.
 	return user, exists
 }
 
@@ -48,23 +67,24 @@ func (m *Memory) Create(task models.Task) int64 {
 	m.Lock()
 	defer m.Unlock()
 
-	m.lastID++
-	task.ID = m.lastID
+	// Используем атомарную операцию для увеличения lastID
+	task.ID = atomic.AddInt64(&m.lastID, 1)
 	m.tasks = append(m.tasks, task)
 	return task.ID
 }
 
-// GetByID возвращает задачу по ID
-func (m *Memory) GetByID(id int64) (*models.Task, bool) {
+// GetByID возвращает копию задачи по ID
+func (m *Memory) GetByID(id int64) (models.Task, bool) {
 	m.RLock()
 	defer m.RUnlock()
 
 	for i := range m.tasks {
 		if m.tasks[i].ID == id {
-			return &m.tasks[i], true
+			// Возвращаем копию задачи, чтобы не допустить изменения задачи извне + удаления во время работы с ней.
+			return m.tasks[i], true
 		}
 	}
-	return nil, false
+	return models.Task{}, false
 }
 
 // GetAll возвращает все задачи
