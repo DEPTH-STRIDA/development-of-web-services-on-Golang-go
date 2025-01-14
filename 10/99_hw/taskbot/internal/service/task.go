@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"taskbot/internal/models"
 	r "taskbot/internal/repository"
@@ -19,16 +20,19 @@ func HandleTasks(userID int64) string {
 		return "Нет задач"
 	}
 
+	// Сортировка задач по ID
+	sort.Sort(models.TaskSlice(tasks))
+
 	var builder strings.Builder
 	for _, task := range tasks {
 		if task.Assignee != nil && task.Assignee.ID == userID {
 			builder.WriteString(fmt.Sprintf("%d. %s by @%s\nassignee: я\n/unassign_%d /resolve_%d\n\n",
 				task.ID, task.Title, task.Owner.Username, task.ID, task.ID))
 		} else if task.Assignee != nil {
-			builder.WriteString(fmt.Sprintf("%d. %s by @%s\nassignee: @%s\n\n",
+			builder.WriteString(fmt.Sprintf("%d. %s by @%s\nassignee: @%s",
 				task.ID, task.Title, task.Owner.Username, task.Assignee.Username))
 		} else {
-			builder.WriteString(fmt.Sprintf("%d. %s by @%s\n/assign_%d\n\n",
+			builder.WriteString(fmt.Sprintf("%d. %s by @%s\n/assign_%d",
 				task.ID, task.Title, task.Owner.Username, task.ID))
 		}
 	}
@@ -141,6 +145,9 @@ func HandleMy(userID int64) string {
 		return "Нет задач"
 	}
 
+	// Сортировка задач по ID
+	sort.Sort(models.TaskSlice(tasks))
+
 	var builder strings.Builder
 	for _, task := range tasks {
 		builder.WriteString(fmt.Sprintf("%d. %s by @%s\n/unassign_%d /resolve_%d\n\n",
@@ -157,6 +164,9 @@ func HandleOwner(userID int64) string {
 	if len(tasks) == 0 {
 		return "Нет задач"
 	}
+
+	// Сортировка задач по ID
+	sort.Sort(models.TaskSlice(tasks))
 
 	var builder strings.Builder
 	for _, task := range tasks {

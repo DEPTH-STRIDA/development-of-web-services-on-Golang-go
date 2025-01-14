@@ -19,3 +19,10 @@ type User struct {
 	// Username - имя пользователя (например телеграм username)
 	Username string
 }
+
+// TaskSlice - тип для сортировки задач
+type TaskSlice []Task
+
+func (ts TaskSlice) Len() int           { return len(ts) }
+func (ts TaskSlice) Less(i, j int) bool { return ts[i].ID < ts[j].ID }
+func (ts TaskSlice) Swap(i, j int)      { ts[i], ts[j] = ts[j], ts[i] }
