@@ -108,20 +108,21 @@ func TestApis(t *testing.T) {
 		Case{
 			Path: "/", // список таблиц
 			Result: CR{
+				// Возвращается даже "response"
 				"response": CR{
 					"tables": []string{"items", "users"},
 				},
 			},
 		},
 		Case{
-			Path:   "/unknown_table",
+			Path:   "/unknown_table", // Неизвестная таблица
 			Status: http.StatusNotFound,
 			Result: CR{
 				"error": "unknown table",
 			},
 		},
 		Case{
-			Path: "/items",
+			Path: "/items", // Таблица без query параметров
 			Result: CR{
 				"response": CR{
 					"records": []CR{
@@ -142,7 +143,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		Case{
-			Path:  "/items",
+			Path:  "/items", // Таблица с query параметром limit
 			Query: "limit=1",
 			Result: CR{
 				"response": CR{
@@ -158,7 +159,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		Case{
-			Path:  "/items",
+			Path:  "/items", // Таблица с query параметром limit и offset
 			Query: "limit=1&offset=1",
 			Result: CR{
 				"response": CR{
@@ -174,7 +175,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		Case{
-			Path: "/items/1",
+			Path: "/items/1", // Таблица с запросом элемента по id
 			Result: CR{
 				"response": CR{
 					"record": CR{
@@ -187,7 +188,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		Case{
-			Path:   "/items/100500",
+			Path:   "/items/100500", // Таблица с запросом несуществующего элемента
 			Status: http.StatusNotFound,
 			Result: CR{
 				"error": "record not found",
@@ -196,16 +197,16 @@ func TestApis(t *testing.T) {
 
 		// тут идёт создание и редактирование
 		Case{
-			Path:   "/items/",
-			Method: http.MethodPut,
+			Path:   "/items/",      // Таблица с созданием элемента
+			Method: http.MethodPut, // Метод PUT
 			Body: CR{
-				"id":          42, // auto increment primary key игнорируется при вставке
+				"id":          42, // auto increment primary key игнорируется при вставке. ТУТ КАК РАЗ PUT
 				"title":       "db_crud",
 				"description": "",
 			},
 			Result: CR{
 				"response": CR{
-					"id": 3,
+					"id": 3, // id созданного элемента
 				},
 			},
 		},
@@ -213,7 +214,7 @@ func TestApis(t *testing.T) {
 		// если много раз вызывать один и тот же тест - записи будут добавляться
 		// поэтому придётся сделать сброс базы каждый раз в PrepareTestData
 		Case{
-			Path: "/items/3",
+			Path: "/items/3", // Таблица с запросом элемента по id. Элемент из предыдущего теста
 			Result: CR{
 				"response": CR{
 					"record": CR{
@@ -225,6 +226,7 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
+		// Обновление элемента. Возвращает количество обновленных строк
 		Case{
 			Path:   "/items/3",
 			Method: http.MethodPost,
@@ -237,6 +239,8 @@ func TestApis(t *testing.T) {
 				},
 			},
 		},
+		// Запрос элемента с id 3. Поле updated=nul, потому что это обычное поле, и оно
+		// не меняется автоматически при редактировании элемента
 		Case{
 			Path: "/items/3",
 			Result: CR{
@@ -278,7 +282,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 
-		// обновление null-поля в таблице
+		// обновление null-поля в таблице. Установка значения null
 		Case{
 			Path:   "/items/3",
 			Method: http.MethodPost,
@@ -328,6 +332,7 @@ func TestApis(t *testing.T) {
 				"error": "field title have invalid type",
 			},
 		},
+		// Устанавливать nil можно только для null-полей
 		Case{
 			Path:   "/items/3",
 			Method: http.MethodPost,
@@ -345,7 +350,7 @@ func TestApis(t *testing.T) {
 			Method: http.MethodPost,
 			Status: http.StatusBadRequest,
 			Body: CR{
-				"updated": 42,
+				"updated": 42, // Должна быть строка
 			},
 			Result: CR{
 				"error": "field updated have invalid type",
@@ -358,7 +363,7 @@ func TestApis(t *testing.T) {
 			Method: http.MethodDelete,
 			Result: CR{
 				"response": CR{
-					"deleted": 1,
+					"deleted": 1, // Возвращает количество удаленных строк
 				},
 			},
 		},
@@ -367,7 +372,7 @@ func TestApis(t *testing.T) {
 			Method: http.MethodDelete,
 			Result: CR{
 				"response": CR{
-					"deleted": 0,
+					"deleted": 0, // Возвращает количество удаленных строк без ошибки
 				},
 			},
 		},
@@ -375,7 +380,7 @@ func TestApis(t *testing.T) {
 			Path:   "/items/3",
 			Status: http.StatusNotFound,
 			Result: CR{
-				"error": "record not found",
+				"error": "record not found", // Возвращается, если элемент не найден
 			},
 		},
 
@@ -468,7 +473,7 @@ func TestApis(t *testing.T) {
 			},
 		},
 		// тут тоже возможна sql-инъекция
-		// если пришло не число на вход - берём дефолтное значене для лимита-оффсета
+		// если пришло не число на вход - берём дефолтное значение для лимита-оффсета
 		Case{
 			Path:  "/users",
 			Query: "limit=1'&offset=1\"",
