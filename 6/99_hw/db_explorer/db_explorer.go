@@ -160,6 +160,7 @@ func (explorer *DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.Error(w, `{"error": "unknown method"}`, http.StatusNotFound)
 }
 
+// handleTablesList обрабатывает запрос на получение списка всех таблиц
 func (explorer *DbExplorer) handleTablesList(w http.ResponseWriter, r *http.Request) {
 	response := Response{
 		Response: map[string]interface{}{
@@ -169,15 +170,18 @@ func (explorer *DbExplorer) handleTablesList(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(response)
 }
 
+// handleTableRecords обрабатывает запрос на получение всех записей таблицы
 func (explorer *DbExplorer) handleTableRecords(w http.ResponseWriter, r *http.Request, table string) {
 	if !explorer.tableExists(table) {
 		http.Error(w, `{"error": "unknown table"}`, http.StatusNotFound)
 		return
 	}
 
+	// Значения по умолчанию для limit и offset
 	limit := 5
 	offset := 0
 
+	// Получаем параметры limit и offset из запроса
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
 			limit = l
@@ -189,46 +193,45 @@ func (explorer *DbExplorer) handleTableRecords(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT ? OFFSET ?", table)
-	rows, err := explorer.db.Query(query, limit, offset)
+	// Формируем запрос на получение записей таблицы
+	query := "SELECT * FROM ? LIMIT ? OFFSET ?"
+	rows, err := explorer.db.Query(query, table, limit, offset)
 	if err != nil {
 		http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
+	// Считываем все записи из базы
 	records := make([]map[string]interface{}, 0)
+	// Считываем каждую запись
 	for rows.Next() {
+		// Считываем запись в структуру
 		record, err := explorer.rowToMap(rows)
 		if err != nil {
 			http.Error(w, `{"error": "scan error"}`, http.StatusInternalServerError)
 			return
 		}
+		// Добавляем запись в список
 		records = append(records, record)
 	}
 
+	// Отправляем ответ
 	json.NewEncoder(w).Encode(Response{
 		Response: map[string]interface{}{"records": records},
 	})
 }
 
-func (explorer *DbExplorer) tableExists(table string) bool {
-	for _, t := range explorer.tables {
-		if t == table {
-			return true
-		}
-	}
-	return false
-}
-
+// handleRecord обрабатывает запрос на получение записи по id
 func (explorer *DbExplorer) handleRecord(w http.ResponseWriter, r *http.Request, table, id string) {
 	if !explorer.tableExists(table) {
 		http.Error(w, `{"error": "unknown table"}`, http.StatusNotFound)
 		return
 	}
 
-	query := fmt.Sprintf("SELECT * FROM `%s` WHERE `%s` = ?", table, explorer.primaryKey[table])
-	rows, err := explorer.db.Query(query, id)
+	// Формируем запрос на получение записи по id
+	query := "SELECT * FROM ? WHERE ? = ?"
+	rows, err := explorer.db.Query(query, table, explorer.primaryKey[table], id)
 	if err != nil {
 		http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
 		return
@@ -251,27 +254,7 @@ func (explorer *DbExplorer) handleRecord(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-func (explorer *DbExplorer) validateValue(value interface{}, colInfo ColumnInfo, field string) error {
-	if value == nil {
-		if !colInfo.Nullable {
-			return fmt.Errorf("field %s have invalid type", field)
-		}
-		return nil
-	}
-
-	switch {
-	case strings.Contains(colInfo.Type, "int"):
-		if _, ok := value.(float64); !ok {
-			return fmt.Errorf("field %s have invalid type", field)
-		}
-	case strings.Contains(colInfo.Type, "varchar") || strings.Contains(colInfo.Type, "text") || strings.Contains(colInfo.Type, "char"):
-		if _, ok := value.(string); !ok {
-			return fmt.Errorf("field %s have invalid type", field)
-		}
-	}
-	return nil
-}
-
+// handleCreate обрабатывает запрос на создание новой записи в таблице
 func (explorer *DbExplorer) handleCreate(w http.ResponseWriter, r *http.Request, table string) {
 	if !explorer.tableExists(table) {
 		http.Error(w, `{"error": "unknown table"}`, http.StatusNotFound)
@@ -308,6 +291,7 @@ func (explorer *DbExplorer) handleCreate(w http.ResponseWriter, r *http.Request,
 			}
 		}
 
+		// Проверяем значение на соответствие типу колонки
 		if err := explorer.validateValue(value, info, field); err != nil {
 			http.Error(w, fmt.Sprintf(`{"error": "%s"}`, err), http.StatusBadRequest)
 			return
@@ -318,12 +302,10 @@ func (explorer *DbExplorer) handleCreate(w http.ResponseWriter, r *http.Request,
 		placeholders = append(placeholders, "?")
 	}
 
-	query := fmt.Sprintf("INSERT INTO `%s` (%s) VALUES (%s)",
-		table,
-		"`"+strings.Join(columns, "`, `")+"`",
-		strings.Join(placeholders, ", "))
+	// Формируем запрос на создание новой записи в таблице
+	query := "INSERT INTO ? (?) VALUES (?)"
 
-	result, err := explorer.db.Exec(query, values...)
+	result, err := explorer.db.Exec(query, table, columns, placeholders)
 	if err != nil {
 		http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
 		return
@@ -338,6 +320,7 @@ func (explorer *DbExplorer) handleCreate(w http.ResponseWriter, r *http.Request,
 	json.NewEncoder(w).Encode(response)
 }
 
+// handleUpdate обрабатывает запрос на обновление записи в таблице
 func (explorer *DbExplorer) handleUpdate(w http.ResponseWriter, r *http.Request, table, id string) {
 	if !explorer.tableExists(table) {
 		http.Error(w, `{"error": "unknown table"}`, http.StatusNotFound)
@@ -377,6 +360,7 @@ func (explorer *DbExplorer) handleUpdate(w http.ResponseWriter, r *http.Request,
 			return
 		}
 
+		// Формируем запрос на обновление записи в таблице
 		sets = append(sets, fmt.Sprintf("`%s` = ?", key))
 		values = append(values, value)
 	}
@@ -392,12 +376,10 @@ func (explorer *DbExplorer) handleUpdate(w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	query := fmt.Sprintf("UPDATE `%s` SET %s WHERE `%s` = ?",
-		table,
-		strings.Join(sets, ", "),
-		explorer.primaryKey[table])
+	// Формируем запрос на обновление записи в таблице
+	query := "UPDATE ? SET ? WHERE ? = ?"
 
-	result, err := explorer.db.Exec(query, values...)
+	result, err := explorer.db.Exec(query, table, sets, explorer.primaryKey[table], id)
 	if err != nil {
 		http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
 		return
@@ -412,14 +394,16 @@ func (explorer *DbExplorer) handleUpdate(w http.ResponseWriter, r *http.Request,
 	json.NewEncoder(w).Encode(response)
 }
 
+// handleDelete обрабатывает запрос на удаление записи из таблицы
 func (explorer *DbExplorer) handleDelete(w http.ResponseWriter, r *http.Request, table, id string) {
 	if !explorer.tableExists(table) {
 		http.Error(w, `{"error": "unknown table"}`, http.StatusNotFound)
 		return
 	}
 
-	query := fmt.Sprintf("DELETE FROM `%s` WHERE `%s` = ?", table, explorer.primaryKey[table])
-	result, err := explorer.db.Exec(query, id)
+	// Формируем запрос на удаление записи из таблицы
+	query := "DELETE FROM ? WHERE ? = ?"
+	result, err := explorer.db.Exec(query, table, explorer.primaryKey[table], id)
 	if err != nil {
 		http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
 		return
@@ -432,6 +416,51 @@ func (explorer *DbExplorer) handleDelete(w http.ResponseWriter, r *http.Request,
 		},
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+// validateValue проверяет значение на соответствие типу колонки
+func (explorer *DbExplorer) validateValue(value interface{}, colInfo ColumnInfo, field string) error {
+	if value == nil {
+		if !colInfo.Nullable {
+			return fmt.Errorf("field %s have invalid type", field)
+		}
+		return nil
+	}
+
+	switch {
+	case strings.Contains(colInfo.Type, "int"):
+		// Проверяем сначала float64 (из JSON)
+		if floatVal, ok := value.(float64); ok {
+			// Проверяем, что число целое
+			if floatVal == float64(int64(floatVal)) {
+				return nil
+			}
+		}
+		// Проверяем int (для других случаев)
+		if _, ok := value.(int); ok {
+			return nil
+		}
+		return fmt.Errorf("field %s have invalid type", field)
+
+	case strings.Contains(colInfo.Type, "varchar") ||
+		strings.Contains(colInfo.Type, "text") ||
+		strings.Contains(colInfo.Type, "char"):
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("field %s have invalid type", field)
+		}
+	}
+	return nil
+}
+
+// tableExists проверяет, существует ли таблица в списке известных таблиц.
+// Проверка ведется по кешу сохраненному в структуре DbExplorer
+func (explorer *DbExplorer) tableExists(table string) bool {
+	for _, t := range explorer.tables {
+		if t == table {
+			return true
+		}
+	}
+	return false
 }
 
 // getColumnTypes получает типы колонок таблицы
