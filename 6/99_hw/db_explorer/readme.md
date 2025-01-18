@@ -162,8 +162,13 @@ SHOW FULL COLUMNS FROM `$table_name`;
 * Обратите внимание на обработку null-значения ( это когда вам не приходит значение переменной, для которой нет дефолта в базе - там буде такой тест-кейс)
 * Придётся вытаскивать неизвестное количество полей из row, подумайте как тут можно применить пустые интерфейсы
 * Поднять mysql-базу локально проще всего через докер:
-```
+
+```linux
 docker run -p 3306:3306 -v $(PWD):/docker-entrypoint-initdb.d -e MYSQL_ROOT_PASSWORD=1234 -e MYSQL_DATABASE=golang -d mysql
+```
+
+```windows
+docker run -p 3306:3306 -v %cd%:/docker-entrypoint-initdb.d -e MYSQL_ROOT_PASSWORD=1234 -e MYSQL_DATABASE=golang -d mysql
 ```
 
 ## Маршрутизация запросов
