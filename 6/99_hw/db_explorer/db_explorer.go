@@ -64,7 +64,7 @@ func NewDbExplorer(db *sql.DB) (http.Handler, error) {
 	// Для каждой таблицы получаем информацию о её колонках
 	for _, tableName := range tables {
 		// Запрашиваем структуру таблицы
-		colRows, err := db.Query("SHOW COLUMNS FROM " + tableName)
+		colRows, err := db.Query(fmt.Sprintf("SHOW COLUMNS FROM `%s`", tableName))
 		if err != nil {
 			return nil, err
 		}
@@ -465,7 +465,8 @@ func (explorer *DbExplorer) tableExists(table string) bool {
 
 // getColumnTypes получает типы колонок таблицы
 func (explorer *DbExplorer) getColumnTypes(table string) (map[string]ColumnInfo, error) {
-	colsRows, err := explorer.db.Query("SHOW COLUMNS FROM `%s`", table)
+	query := fmt.Sprintf("SHOW COLUMNS FROM `%s`", table)
+	colsRows, err := explorer.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
