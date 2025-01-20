@@ -14,7 +14,7 @@ Each folder corresponds to an assignment number. Inside you will find:
 
 ### Completion Status
 
-✅ - completed | 🚧 - in progress
+✅ - completed | ❌ - in progress
 
 | Number | Status |
 |-------|--------|
