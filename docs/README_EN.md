@@ -4,7 +4,7 @@
 
 ## About Repository
 
-This repository contains homework solutions for the [Go Web Services Development Course](https://stepik.org/course/URL).
+This repository contains homework solutions for the [Go Web Services Development Course](https://stepik.org/course/187490/syllabus).
 
 ### Repository Structure
 
